@@ -329,28 +329,28 @@ resource "azurerm_linux_virtual_machine" "agent_vm" {
 
 # Deploy Elasticsearch, Kibana and Logstash on the Kubernetes cluster =======================================================================================================
 # Create ConfigMap for Elasticsearch configuration
-// resource "kubernetes_config_map" "elasticsearch_config" {
-//   metadata {
-//     name      = "elasticsearch-config"
-//     namespace = "default"
-//   }
-//   data = {
-//     "elasticsearch.yml" = <<-EOT
-//       cluster.name: "elk-cluster"
-//       network.host: 0.0.0.0
-//       discovery.type: single-node
-//       xpack.security.enabled: true
-//       xpack.security.enrollment.enabled: true
-//       xpack.security.http.ssl.enabled: false
-//       xpack.security.transport.ssl.enabled: false
-//       xpack.security.audit.enabled: true
-//       xpack.monitoring.templates.enabled: true
-//       xpack.monitoring.collection.enabled: true
-//       path.data: /usr/share/elasticsearch/data
-//       path.logs: /usr/share/elasticsearch/logs
-//     EOT
-//   }
-// }
+resource "kubernetes_config_map" "elasticsearch_config" {
+  metadata {
+    name      = "elasticsearch-config"
+    namespace = "default"
+  }
+  data = {
+    "elasticsearch.yml" = <<-EOT
+      cluster.name: "elk-cluster"
+      network.host: 0.0.0.0
+      discovery.type: single-node
+      xpack.security.enabled: true
+      xpack.security.enrollment.enabled: false
+      xpack.security.http.ssl.enabled: false
+      xpack.security.transport.ssl.enabled: false
+      xpack.security.audit.enabled: true
+      xpack.monitoring.templates.enabled: true
+      xpack.monitoring.collection.enabled: true
+      path.data: /usr/share/elasticsearch/data
+      path.logs: /usr/share/elasticsearch/logs
+    EOT
+  }
+}
 
 resource "kubernetes_deployment" "elasticsearch" {
   metadata {
@@ -398,7 +398,7 @@ resource "kubernetes_deployment" "elasticsearch" {
 
           volume_mount {
             name       = "elasticsearch-config"
-            mount_path = "/usr/share/elasticsearch/config/elasticsearch.yml"
+            mount_path = "/usr/share/elasticsearch/config"
             sub_path   = "elasticsearch.yml"
           }
 
@@ -421,6 +421,9 @@ resource "kubernetes_deployment" "elasticsearch" {
 
         volume {
           name = "elasticsearch-config"
+          config_map {
+            name = kubernetes_config_map.elasticsearch_config.metadata[0].name
+          }
         }
 
         volume {
@@ -431,7 +434,6 @@ resource "kubernetes_deployment" "elasticsearch" {
     }
   }
 }
-
 
 resource "kubernetes_deployment" "kibana" {
   metadata {
