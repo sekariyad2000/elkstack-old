@@ -520,6 +520,31 @@ resource "kubernetes_config_map" "logstash_config" {
   }
 }
 
+# Create ConfigMap for Logstash pipeline configuration (for the second logstash deployment)
+resource "kubernetes_config_map" "logstash_config2" {
+  metadata {
+    name      = "logstash-pipeline-config-alt"
+    namespace = "default"
+  }
+
+  data = {
+    "logstash.conf" = <<-EOT
+      input {
+        beats {
+          port => 5044
+        }
+      }
+
+      output {
+        elasticsearch {
+          hosts => ["http://elasticsearch-alt:9200"]
+          index => "logstash-%%{+YYYY.MM.dd}"
+        }
+      }
+    EOT
+  }
+}
+
 resource "kubernetes_deployment" "logstash" {
   metadata {
     name      = "logstash"
