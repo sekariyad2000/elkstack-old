@@ -475,7 +475,7 @@ resource "kubernetes_deployment" "kibana" {
           # Enable enrollment security
           env {
             name  = "xpack.security.enrollment.enabled"
-            value = "true"
+            value = "false"
           }
         }
       }
@@ -493,7 +493,7 @@ resource "kubernetes_config_map" "logstash_main_config" {
   data = {
     "logstash.yml" = <<-EOT
       http.host: "0.0.0.0"
-      xpack.monitoring.enabled: true
+      xpack.monitoring.enabled: false
       path.config: /usr/share/logstash/pipeline
       log.level: info
     EOT
@@ -501,9 +501,9 @@ resource "kubernetes_config_map" "logstash_main_config" {
 }
 
 # Create ConfigMap for Logstash pipeline configuration
-resource "kubernetes_config_map" "logstash_config" {
+resource "kubernetes_config_map" "logstash_config2" {
   metadata {
-    name      = "logstash-pipeline-config"
+    name      = "logstash-pipeline-config-alt"
     namespace = "default"
   }
 
@@ -515,31 +515,9 @@ resource "kubernetes_config_map" "logstash_config" {
         }
       }
 
-      filter {
-        # Example: Parse Apache logs
-        if [type] == "apache" {
-          grok {
-            match => { "message" => "%%{COMBINEDAPACHELOG}" }
-          }
-          date {
-            match => [ "timestamp", "dd/MMM/yyyy:HH:mm:ss Z" ]
-          }
-        }
-        
-        # Example: Parse JSON logs
-        if [type] == "json" {
-          json {
-            source => "message"
-          }
-        }
-      }
-
       output {
         elasticsearch {
-          hosts => ["https://elasticsearch.default.svc.cluster.local:9200"]
-          user => "elastic"
-          ssl => true
-          ssl_certificate_verification => false
+          hosts => ["http://elasticsearch-alt:9200"]
           index => "logstash-%%{+YYYY.MM.dd}"
         }
       }
@@ -551,85 +529,45 @@ resource "kubernetes_deployment" "logstash" {
   metadata {
     name      = "logstash"
     namespace = "default"
-    labels = {
-      app = "logstash"
-    }
+    labels    = { app = "logstash" }
   }
 
   spec {
     replicas = 1
 
     selector {
-      match_labels = {
-        app = "logstash"
-      }
+      match_labels = { app = "logstash" }
     }
 
     template {
-      metadata {
-        labels = {
-          app = "logstash"
-        }
-      }
+      metadata { labels = { app = "logstash" } }
 
       spec {
         container {
           name  = "logstash"
           image = "docker.elastic.co/logstash/logstash:8.16.1"
 
-          port {
-            container_port = 5044
-          }
+          port { container_port = 5044 }
 
           env {
             name  = "ELASTICSEARCH_HOSTS"
-            value = "https://elasticsearch.default.svc.cluster.local:9200"
+            value = "http://elasticsearch.default.svc.cluster.local:9200"
           }
 
-          env {
-            name  = "ELASTICSEARCH_USER"
-            value = "elastic"
-          }
-
-          env {
-            name  = "ELASTICSEARCH_PASSWORD"
-            value = data.external.elastic_password.result.result
-          }
-
-          volume_mount {
-            name       = "logstash-pipeline"
-            mount_path = "/usr/share/logstash/pipeline"
-          }
-
-          volume_mount {
-            name       = "logstash-main-config"
-            mount_path = "/usr/share/logstash/config/logstash.yml"
-            sub_path   = "logstash.yml"
-          }
-        }
-
-        volume {
-          name = "logstash-pipeline"
-          config_map {
-            name = kubernetes_config_map.logstash_config.metadata[0].name
-          }
-        }
-
-        volume {
-          name = "logstash-main-config"
-          config_map {
-            name = kubernetes_config_map.logstash_main_config.metadata[0].name
+          resources {
+            requests = {
+              cpu    = "500m"   # request 0.5 CPU
+              memory = "1Gi"    # request 1 GiB RAM
+            }
+            limits = {
+              cpu    = "1000m"  # cap at 1 CPU
+              memory = "2Gi"    # cap at 2 GiB RAM
+            }
           }
         }
       }
     }
   }
-
-  depends_on = [
-    kubernetes_config_map.logstash_config,
-    kubernetes_config_map.logstash_main_config,
-    data.external.elastic_password
-  ]
 }
 
 # Use loadbalancer to expose Elasticsearch, Kibana and Logstash with their respective ports ====================================================================================================
@@ -706,6 +644,11 @@ resource "null_resource" "wait_for_kibana_pod" {
 
 data "external" "enrollment_token" {
   program = ["bash", "${path.module}/elastic-enrollment-token.sh"]
+  depends_on = [null_resource.wait_for_elasticsearch_pod]
+}
+
+data "external" "elastic_password" {
+  program = ["bash", "${path.module}/elastic-password.sh"]
   depends_on = [null_resource.wait_for_elasticsearch_pod]
 }
 
