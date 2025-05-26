@@ -349,6 +349,18 @@ resource "kubernetes_config_map" "elasticsearch_config" {
       path.data: /usr/share/elasticsearch/data
       path.logs: /usr/share/elasticsearch/logs
     EOT
+    "log4j2.properties" = <<-EOT
+      status = error
+      # configure All loggers to log everything to the console
+      appender.console.type = Console
+      appender.console.name = console
+      appender.console.layout.type = PatternLayout
+      appender.console.layout.pattern = [%d{ISO8601}][%-5p][%-25c{1.}] %marker%.-10000m%n
+
+      rootLogger.level = info
+      rootLogger.appenderRef.console.ref = console
+
+    EOT
   }
 }
 
